@@ -9,16 +9,28 @@ export class CdkStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // S3 bucket for incoming voice messages
     const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge', {
+      bucketName: 'cdkstack-appointmentconcierge-uak8x5wugi8v',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
 
+    // S3 bucket for transacription results
+    const voice_audio_transcripts_bucket = new s3.Bucket(this, 'voice-audio-transcripts', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    cdk.Tag.add(voice_audio_transcripts_bucket, 'Name', 'voice-audio-transcripts')
+
+    // lambda function to convert audio to text
     const audio_to_text_handler = new lambda.Function(this, 'audio-to-text', {
       runtime: lambda.Runtime.PYTHON_3_8,
       code: lambda.Code.fromAsset('../AppointmentConcierge/AudioToText'),
       handler: 'audio_to_text.lambda_handler',
       logRetention: RetentionDays.THREE_MONTHS,
+      environment: {
+        OUTPUT_BUCKET: voice_audio_transcripts_bucket.bucketName,
+      },
     });
     cdk.Tag.add(audio_to_text_handler, 'Name', 'audio-to-text')
     
@@ -29,11 +41,7 @@ export class CdkStack extends cdk.Stack {
       filters: [ { prefix: 'incoming_audio/' } ],
     }));
 
-    const voice_audio_transcripts_bucket = new s3.Bucket(this, 'voice-audio-transcripts', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    cdk.Tag.add(voice_audio_transcripts_bucket, 'Name', 'voice-audio-transcripts')
-
+    // lambda function to extract the medical entities
     const extract_entities_handler = new lambda.Function(this, 'extract_medical_entities', {
       runtime: lambda.Runtime.PYTHON_3_8,
       code: lambda.Code.fromAsset('../AppointmentConcierge/ExtractMedicalEntities'),
@@ -49,6 +57,7 @@ export class CdkStack extends cdk.Stack {
       events: [ s3.EventType.OBJECT_CREATED_POST, s3.EventType.OBJECT_CREATED_PUT ],
     }));
     
+    // DynamoDB table to store extracted data
     const table = new dynamodb.Table(this, 'Appointment Concierge', {
       tableName: 'appointment-concierge',
       partitionKey: { name: 'time', type: dynamodb.AttributeType.NUMBER },
