@@ -9,7 +9,9 @@ export class CdkStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge');
+    const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
 
     const audio_to_text_handler = new lambda.Function(this, 'audio-to-text', {
@@ -27,7 +29,9 @@ export class CdkStack extends cdk.Stack {
       filters: [ { prefix: 'incoming_audio/' } ],
     }));
 
-    const voice_audio_transcripts_bucket = new s3.Bucket(this, 'voice-audio-transcripts');
+    const voice_audio_transcripts_bucket = new s3.Bucket(this, 'voice-audio-transcripts', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     cdk.Tag.add(voice_audio_transcripts_bucket, 'Name', 'voice-audio-transcripts')
 
     const extract_entities_handler = new lambda.Function(this, 'extract_medical_entities', {
@@ -46,7 +50,9 @@ export class CdkStack extends cdk.Stack {
     }));
     
     const table = new dynamodb.Table(this, 'Appointment Concierge', {
+      tableName: 'appointment-concierge',
       partitionKey: { name: 'time', type: dynamodb.AttributeType.NUMBER },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
     cdk.Tag.add(table, 'Name', 'appointment-concierge')
   }
