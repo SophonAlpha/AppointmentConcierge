@@ -2,6 +2,7 @@ import * as cdk from '@aws-cdk/core';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as s3 from '@aws-cdk/aws-s3';
 import * as dynamodb from '@aws-cdk/aws-dynamodb';
+import * as iam from '@aws-cdk/aws-iam'; 
 import { S3EventSource } from '@aws-cdk/aws-lambda-event-sources';
 import { RetentionDays } from '@aws-cdk/aws-logs';
 
@@ -34,6 +35,9 @@ export class CdkStack extends cdk.Stack {
     });
     cdk.Tag.add(audio_to_text_handler, 'Name', 'audio-to-text')
     
+    audio_to_text_handler.role?.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonTranscribeFullAccess'));
+    
     appointment_concierge_bucket.grantRead(audio_to_text_handler);
     
     audio_to_text_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
@@ -42,19 +46,26 @@ export class CdkStack extends cdk.Stack {
     }));
 
     // lambda function to extract the medical entities
-    const extract_entities_handler = new lambda.Function(this, 'extract_medical_entities', {
+    const extract_entities_handler = new lambda.Function(this, 'extract-medical-entities', {
       runtime: lambda.Runtime.PYTHON_3_8,
       code: lambda.Code.fromAsset('../AppointmentConcierge/ExtractMedicalEntities'),
       handler: 'extract_medical_entities.lambda_handler',
       logRetention: RetentionDays.THREE_MONTHS,
     });
-    cdk.Tag.add(extract_entities_handler, 'Name', 'extract_medical_entities')
+    cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
+
+    extract_entities_handler.role?.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('ComprehendMedicalFullAccess'));
     
+    voice_audio_transcripts_bucket.grantReadWrite(audio_to_text_handler);
     voice_audio_transcripts_bucket.grantRead(extract_entities_handler);
     appointment_concierge_bucket.grantReadWrite(extract_entities_handler)
     
     extract_entities_handler.addEventSource(new S3EventSource(voice_audio_transcripts_bucket, {
       events: [ s3.EventType.OBJECT_CREATED_POST, s3.EventType.OBJECT_CREATED_PUT ],
+      filters: [ { 
+        prefix: 'medical/',
+        suffix: '.json' } ],
     }));
     
     // DynamoDB table to store extracted data
