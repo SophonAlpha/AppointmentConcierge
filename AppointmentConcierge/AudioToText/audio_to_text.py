@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 class OutputBucketNotConfigured(Exception):
     """
     Custom error class: thrown when the lambda environment
-    variable 'OUTPUT_BUCKET' is not defined.
+    variable 'OUTPUT_BUCKET' is not configured.
     """
 
 def lambda_handler(event, context):
