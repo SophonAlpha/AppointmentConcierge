@@ -73,11 +73,83 @@ def extract_medical_entities(event, context):
 		f'database service:{json.dumps(table_response)}')
 	
 	# build message summary in html
-	message_summary = build_message_summary(comprehend_response)
+	msg_html_doc = build_message_summary(text,
+										 comprehend_response,
+										 s3_obj['LastModified'])
+	# save HTML document to S3 bucket
 	
 	
-def build_message_summary(comprehend_response):
-	message_summary = ''
 	
-	return message_summary
+def build_message_summary(text, comprehend_response, msg_time):
+	"""
+	Put message information into HTML formatted document.
+	"""
+	phi_map = {
+		'phi_type': ['NAME', 'AGE', 'ADDRESS', 'PROFESSION', 'EMAIL',
+				     'IDENTIFIER', 'CONTACT_POINT'],
+		'summary_text': ['Name', 'Age', 'Address', 'Profession', 'Email',
+				         'Identifier', 'Contact']
+	}
+	medical_categories = ['MEDICAL_CONDITION', 'ANATOMY', 'MEDICATION',
+						  'TEST_TREATMENT_PROCEDURE']
+	msg_data = {}
+	for entity in comprehend_response['Entities']:
+		# set up sections
+		if entity['Category'] == 'PROTECTED_HEALTH_INFORMATION' and \
+			not msg_data.get('PHI', False):
+				# set up PHI section
+				msg_data['PHI'] = {}
+		if entity['Category'] in medical_categories and \
+			not msg_data.get('details', False):
+				# set up PHI section
+				msg_data['details'] = {}
+		# extract PROTECTED_HEALTH_INFORMATION entities
+		if entity['Type'] in phi_map['phi_type']:
+			idx = phi_map['phi_type'].index(entity['Type'])
+			msg_data['PHI'][phi_map['summary_text'][idx]] = entity['Text']
+		# extract MEDICAL_CONDITION entities
+		if entity['Category'] == 'MEDICAL_CONDITION':
+			if msg_data['details'].get('Symptoms', False):
+				msg_data['details']['Symptoms'].append(entity['Text'])
+			else:
+				msg_data['details']['Symptoms'] = [entity['Text']]
+		# extract ANATOMY entities
+		if entity['Category'] == 'ANATOMY':
+			if msg_data['details'].get('Anatomy', False):
+				msg_data['details']['Anatomy'].append(entity['Text'])
+			else:
+				msg_data['details']['Anatomy'] = [entity['Text']]
+		# extract MEDICATION entities
+		if entity['Category'] == 'MEDICATION':
+			if msg_data['details'].get('Medication', False):
+				msg_data['details']['Medication'].append(entity['Text'])
+			else:
+				msg_data['details']['Medication'] = [entity['Text']]
+		# extract TEST_TREATMENT_PROCEDURE entities
+		if entity['Category'] == 'TEST_TREATMENT_PROCEDURE':
+			if msg_data['details'].get('Treatments, Tests, Procedures', False):
+				msg_data['details']['Treatments, Tests, Procedures'].append(entity['Text'])
+			else:
+				msg_data['details']['Treatments, Tests, Procedures'] = [entity['Text']]
+	# build HTML document
+	msg_html_doc = '<html><head><style>body {font-family: Arial, ' \
+		'serif;font-size: 14px;}</style><title></title></head><body>'
+	msg_html_doc += '<H1 style="color:#b30000" align="center">' \
+		'Voice Message Transcript</H1><hr>'
+	msg_html_doc += f'<p><b>Message Received : </b>' \
+					f'{msg_time.strftime("%B %d, %Y %H:%M:%S")}</p>'
+	msg_html_doc += f'<p><b>Transcript : </b>{text}</p>'
+	# add section with PHI
+	if msg_data.get('PHI', False):
+		msg_html_doc += '<hr>'
+		for key in msg_data['PHI'].keys():
+			msg_html_doc += f'<p><b>{key} : </b>{msg_data["PHI"][key]}</p>'
+	# add section with medical details
+	if msg_data.get('details', False):
+		msg_html_doc += '<hr>'
+		for key in msg_data['details'].keys():
+			msg_html_doc += f'<p><b>{key} : </b>{", ".join(msg_data["details"][key])}</p>'
+	# end of HTML document
+	msg_html_doc += '</body></html>'
+	return msg_html_doc
 
