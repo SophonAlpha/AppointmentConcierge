@@ -17,6 +17,7 @@ export class CdkStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
+    cdk.Tag.add(appointment_concierge_bucket, 'application', 'Appointment Concierge')
 
     // ----- DynamoDB table to store extracted data ----- 
     const table = new dynamodb.Table(this, 'Appointment Concierge', {
@@ -24,6 +25,7 @@ export class CdkStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
     cdk.Tag.add(table, 'Name', 'appointment-concierge')
+    cdk.Tag.add(table, 'application', 'Appointment Concierge')
 
     // ----- lambda function to convert audio to text ----- 
     const audio_to_text_handler = new lambda.Function(this, 'audio-to-text', {
@@ -37,6 +39,7 @@ export class CdkStack extends cdk.Stack {
       },
     });
     cdk.Tag.add(audio_to_text_handler, 'Name', 'audio-to-text')
+    cdk.Tag.add(audio_to_text_handler, 'application', 'Appointment Concierge')
     
     // ----- lambda function to extract the medical entities ----- 
     const extract_entities_handler = new lambda.Function(this, 'extract-medical-entities', {
@@ -52,6 +55,7 @@ export class CdkStack extends cdk.Stack {
       },
     });
     cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
+    cdk.Tag.add(extract_entities_handler, 'application', 'Appointment Concierge')
 
     // ----- lambda function to send email with transcribed message  -----
     const send_email_handler = new lambda.Function(this, 'send-email', {
@@ -62,9 +66,11 @@ export class CdkStack extends cdk.Stack {
       logRetention: RetentionDays.THREE_MONTHS,
       environment: {
         SSM_PS_APPCONFIG_PATH: '/AppointmentConcierge',
+        RECEIVER_EMAIL_ADDRESS: 'steditt@amazon.com',
       },
     });
-    cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
+    cdk.Tag.add(send_email_handler, 'Name', 'send-email')
+    cdk.Tag.add(send_email_handler, 'application', 'Appointment Concierge')
 
     // ----- trigger for lambda functions -----
     audio_to_text_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
@@ -112,6 +118,5 @@ export class CdkStack extends cdk.Stack {
       'arn:aws:kms:me-south-1:060337561279:key/6116ebe4-074a-4a2b-b042-48dc31a18ccb');
     key.grantEncryptDecrypt(send_email_handler);
 
-    
   }
 }

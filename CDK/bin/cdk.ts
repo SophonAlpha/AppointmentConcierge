@@ -4,5 +4,4 @@ import * as cdk from '@aws-cdk/core';
 import { CdkStack } from '../lib/cdk-stack';
 
 const app = new cdk.App();
-const stack = new CdkStack(app, 'CdkStack');
-cdk.Tag.add(stack, 'application', 'Appointment Concierge')
+const stack = new CdkStack(app, 'CDK');

@@ -43,6 +43,7 @@ def lambda_handler(event, context):
 def process_event(event, context):
     config = load_config(os.environ['SSM_PS_APPCONFIG_PATH'])
     msg_doc = load_msg_doc(event)
+    send_email(config, msg_doc)
     
 
 def load_config(app_config_path):
@@ -74,15 +75,39 @@ def load_msg_doc(event):
     :param event: Lambda trigger event message 
     :return: message HTML document
     """
-    logger.info(f'Start: reading message document from S3.')
+    logger.info('Start: reading message document from S3.')
     bucket_name = event['Records'][0]['s3']['bucket']['name']
     key = event['Records'][0]['s3']['object']['key']
     file_url = f's3://{bucket_name}/{key}'
     s3_obj = s3.get_object(Bucket=bucket_name, Key=key)
     if s3_obj['ResponseMetadata']['HTTPStatusCode'] == 200:
         msg_doc = s3_obj['Body'].read().decode('utf-8')
-        logger.info('Success: reading message document from S3.')
+        logger.info('Success: read message document from S3.')
     else:
         logger.error(f'Error: reading message document from S3 failed with ' \
                      f'HTTP status code {s3_obj["ResponseMetadata"]["HTTPStatusCode"]}.')
     return msg_doc
+
+
+def send_email(config, msg_doc):
+    message = MIMEMultipart()
+    receiver_email = os.environ['RECEIVER_EMAIL_ADDRESS']
+    message["Subject"] = "[Appointment Concierge] - voice message transcript"
+    message["From"] = config['SendEmail']['smtp-sender-email']
+    message["To"] = receiver_email
+    message.attach(MIMEText(msg_doc, "html"))
+    logger.info('Start: sending email.')
+    with smtplib.SMTP(
+        config['SendEmail']['smtp-server'], config['SendEmail']['smtp-port']
+        ) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(config['SendEmail']['smtp-user-id'],
+                     config['SendEmail']['smtp-password'])
+        server.sendmail(
+            config['SendEmail']['smtp-sender-email'],
+            receiver_email,
+            message.as_string()
+        )
+        logger.info('Success: email sent.')
