@@ -20,3 +20,15 @@ Resources:
       MemorySize: 128
       Timeout: 15
       CodeUri: .debug/
+  SendEmail:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: SendEmail/lambda_function.lambda_handler
+      Runtime: python3.6
+      Description: ''
+      MemorySize: 128
+      Timeout: 15
+      CodeUri: .debug/
+      Environment:
+        Variables:
+          SSM_PS_APPCONFIG_PATH: '/AppointmentConcierge'

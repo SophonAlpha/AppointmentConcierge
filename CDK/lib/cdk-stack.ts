@@ -2,7 +2,8 @@ import * as cdk from '@aws-cdk/core';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as s3 from '@aws-cdk/aws-s3';
 import * as dynamodb from '@aws-cdk/aws-dynamodb';
-import * as iam from '@aws-cdk/aws-iam'; 
+import * as iam from '@aws-cdk/aws-iam';
+import * as kms from '@aws-cdk/aws-kms';
 import { S3EventSource } from '@aws-cdk/aws-lambda-event-sources';
 import { RetentionDays } from '@aws-cdk/aws-logs';
 
@@ -17,15 +18,9 @@ export class CdkStack extends cdk.Stack {
     });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
 
-    // ----- S3 bucket for transacription results ----- 
-    const voice_audio_transcripts_bucket = new s3.Bucket(this, 'voice-audio-transcripts', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    cdk.Tag.add(voice_audio_transcripts_bucket, 'Name', 'voice-audio-transcripts')
-
     // ----- DynamoDB table to store extracted data ----- 
     const table = new dynamodb.Table(this, 'Appointment Concierge', {
-      partitionKey: { name: 'time', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'message time', type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
     cdk.Tag.add(table, 'Name', 'appointment-concierge')
@@ -35,9 +30,10 @@ export class CdkStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_8,
       code: lambda.Code.fromAsset('../AppointmentConcierge/AudioToText'),
       handler: 'audio_to_text.lambda_handler',
+      timeout: cdk.Duration.seconds(10),
       logRetention: RetentionDays.THREE_MONTHS,
       environment: {
-        OUTPUT_BUCKET: voice_audio_transcripts_bucket.bucketName,
+        OUTPUT_BUCKET: appointment_concierge_bucket.bucketName,
       },
     });
     cdk.Tag.add(audio_to_text_handler, 'Name', 'audio-to-text')
@@ -47,9 +43,25 @@ export class CdkStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_8,
       code: lambda.Code.fromAsset('../AppointmentConcierge/ExtractMedicalEntities'),
       handler: 'extract_medical_entities.lambda_handler',
+      timeout: cdk.Duration.seconds(10),
       logRetention: RetentionDays.THREE_MONTHS,
       environment: {
         DB_TABLE_NAME: table.tableName,
+        MSG_DOC_S3_BUCKET: appointment_concierge_bucket.bucketName,
+        MSG_DOC_S3_PREFIX: 'message-docs/'
+      },
+    });
+    cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
+
+    // ----- lambda function to send email with transcribed message  -----
+    const send_email_handler = new lambda.Function(this, 'send-email', {
+      runtime: lambda.Runtime.PYTHON_3_8,
+      code: lambda.Code.fromAsset('../AppointmentConcierge/SendEmail'),
+      handler: 'send_email.lambda_handler',
+      timeout: cdk.Duration.seconds(10),
+      logRetention: RetentionDays.THREE_MONTHS,
+      environment: {
+        SSM_PS_APPCONFIG_PATH: '/AppointmentConcierge',
       },
     });
     cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
@@ -57,14 +69,22 @@ export class CdkStack extends cdk.Stack {
     // ----- trigger for lambda functions -----
     audio_to_text_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
       events: [ s3.EventType.OBJECT_CREATED_POST, s3.EventType.OBJECT_CREATED_PUT ],
-      filters: [ { prefix: 'incoming_audio/' } ],
+      filters: [ { 
+        prefix: 'incoming-audio/' } ],
     }));
 
-    extract_entities_handler.addEventSource(new S3EventSource(voice_audio_transcripts_bucket, {
+    extract_entities_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
       events: [ s3.EventType.OBJECT_CREATED_POST, s3.EventType.OBJECT_CREATED_PUT ],
       filters: [ { 
         prefix: 'medical/',
         suffix: '.json' } ],
+    }));
+
+    send_email_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
+      events: [ s3.EventType.OBJECT_CREATED_POST, s3.EventType.OBJECT_CREATED_PUT ],
+      filters: [ { 
+        prefix: 'message-docs/',
+        suffix: '.html' } ],
     }));
 
     // ----- set permissions -----
@@ -75,10 +95,23 @@ export class CdkStack extends cdk.Stack {
       iam.ManagedPolicy.fromAwsManagedPolicyName('ComprehendMedicalFullAccess'));
     extract_entities_handler.role?.addManagedPolicy(
       iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess'));
+      
+    send_email_handler.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['arn:aws:ssm:me-south-1:060337561279:parameter/AppointmentConcierge'],
+      actions: ['ssm:GetParametersByPath'],
+    }))
     
-    appointment_concierge_bucket.grantRead(audio_to_text_handler);
-    appointment_concierge_bucket.grantReadWrite(extract_entities_handler)
-    voice_audio_transcripts_bucket.grantReadWrite(audio_to_text_handler);
-    voice_audio_transcripts_bucket.grantRead(extract_entities_handler);
+    appointment_concierge_bucket.grantReadWrite(audio_to_text_handler);
+    appointment_concierge_bucket.grantReadWrite(extract_entities_handler);
+    appointment_concierge_bucket.grantReadWrite(send_email_handler);
+
+    const key = kms.Key.fromKeyArn(
+      this,
+      'SendEmailParameterStoreKey',
+      'arn:aws:kms:me-south-1:060337561279:key/6116ebe4-074a-4a2b-b042-48dc31a18ccb');
+    key.grantEncryptDecrypt(send_email_handler);
+
+    
   }
 }

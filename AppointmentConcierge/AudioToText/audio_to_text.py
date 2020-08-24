@@ -8,11 +8,9 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-class OutputBucketNotConfigured(Exception):
-    """
-    Custom error class: thrown when the lambda environment
-    variable 'OUTPUT_BUCKET' is not configured.
-    """
+# Initialize boto3 client at global scope for connection reuse
+transcribe = boto3.client('transcribe')
+
 
 def lambda_handler(event, context):
 	"""
@@ -29,7 +27,8 @@ def lambda_handler(event, context):
 		initiate_transciption_job(event, context)
 	except Exception:
 		exception_type, exception_value, exception_traceback = sys.exc_info()
-		traceback_string = traceback.format_exception(exception_type, exception_value, exception_traceback)
+		traceback_string = traceback.format_exception(
+			exception_type, exception_value, exception_traceback)
 		err_msg = json.dumps({
 			"errorType": exception_type.__name__,
 			"errorMessage": str(exception_value),
@@ -41,10 +40,7 @@ def initiate_transciption_job(event, context):
 	"""
 	Setup and start the Transcribe job.
 	"""
-	output_bucket_name = os.environ.get('OUTPUT_BUCKET', False)
-	if not output_bucket_name:
-		raise OutputBucketNotConfigured(
-			'Environment variable \'OUTPUT_BUCKET\' is not defined.')
+	output_bucket_name = os.environ['OUTPUT_BUCKET']
 	file = event['Records'][0]
 	bucket_name = file['s3']['bucket']['name']
 	key = file['s3']['object']['key']
@@ -60,10 +56,7 @@ def initiate_transciption_job(event, context):
 		'Specialty': 'PRIMARYCARE',
     	'Type': 'CONVERSATION',
 	})
-	logger.info(
-		f'starting transcription job with the following parameters:{job_json}'
-		)
-	transcribe = boto3.client('transcribe')
+	logger.info('Start: starting transcription job.')
 	response = transcribe.start_medical_transcription_job(
 		MedicalTranscriptionJobName = job_name,
 		Media = {'MediaFileUri': file_url},
@@ -71,13 +64,12 @@ def initiate_transciption_job(event, context):
 		OutputBucketName = output_bucket_name,
 		Specialty = 'PRIMARYCARE',
     	Type = 'CONVERSATION',)
-	# covert datetime objects to string
-	if response["MedicalTranscriptionJob"].get("StartTime", False):
+	if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+		logger.info('Success: transcription job started.')
+		# covert datetime objects to string
 		response['MedicalTranscriptionJob']['StartTime'] = f'{response["MedicalTranscriptionJob"]["StartTime"]}'
-	if response["MedicalTranscriptionJob"].get("CreationTime", False):
 		response['MedicalTranscriptionJob']['CreationTime'] = f'{response["MedicalTranscriptionJob"]["CreationTime"]}'
-	if response["MedicalTranscriptionJob"].get("CompletionTime", False):
 		response['MedicalTranscriptionJob']['CompletionTime'] = f'{response["MedicalTranscriptionJob"]["CompletionTime"]}'
-	logger.info(
-		f'the following response has been received form the '
-		f'Transcribe service:{json.dumps(response)}')
+	else:
+		logger.error(f'Error: Transcribe service returned HTTP status code ' \
+                     f'{response["ResponseMetadata"]["HTTPStatusCode"]}.')

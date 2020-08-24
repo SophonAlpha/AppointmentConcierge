@@ -7,14 +7,18 @@ import boto3
 import datetime
 from decimal import Decimal
 
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-class DBTableNameNotConfigured(Exception):
-    """
-    Custom error class: thrown when the lambda environment
-    variable 'DB_TABLE_NAME' is not configured.
-    """
+# Initialize boto3 client at global scope for connection reuse
+s3 = boto3.client('s3')
+comprehend = boto3.client('comprehendmedical', region_name='eu-west-1')
+dynamodb = boto3.resource('dynamodb')
+
 
 def lambda_handler(event, context):
 	"""
@@ -28,7 +32,7 @@ def lambda_handler(event, context):
 		logger.info(f'Received the following event data: \
 			{json.dumps(event, indent=4)}')
 		# let's start the actual work
-		extract_medical_entities(event, context)
+		process_event(event, context)
 	except Exception:
 		exception_type, exception_value, exception_traceback = sys.exc_info()
 		traceback_string = traceback.format_exception(exception_type, exception_value, exception_traceback)
@@ -39,50 +43,65 @@ def lambda_handler(event, context):
 		})
 		logger.error(err_msg)
 
-def extract_medical_entities(event, context):
-	# get parameters for comprehend job
+
+def process_event(event, context):
+	"""
+	Process the received event.
+	"""
+	comprehend_response = extract_medical_entities(event)
+	save_to_db(comprehend_response)
+	msg_data = extract_msg_details(comprehend_response)
+	msg_html_doc = build_message_doc(msg_data)
+	save_to_s3(msg_html_doc, comprehend_response['message transcript file url'])
+
+
+def extract_medical_entities(event):
+	"""
+	Extract medical entities using Amazon Comprehend Medical.
+	"""
+	# set up parameters for comprehend job
 	bucket_name = event['Records'][0]['s3']['bucket']['name']
 	key = event['Records'][0]['s3']['object']['key']
 	file_url = f's3://{bucket_name}/{key}'
-	s3 = boto3.client('s3')
-	s3_obj = s3.get_object(Bucket = bucket_name, Key = key)
+	s3_obj = s3.get_object(Bucket=bucket_name, Key=key)
 	response = json.loads(s3_obj['Body'].read().decode('utf-8'))
 	text = response['results']['transcripts'][0]['transcript']
-	comprehend = boto3.client('comprehendmedical', region_name = 'eu-west-1')
-	
 	# run comprehend job
-	logger.info('detecting medical entities ...')
-	comprehend_response = comprehend.detect_entities_v2(Text = text)
-	logger.info(
-		f'the following response has been received form the '
-		f'Comprehend Medical service:{json.dumps(comprehend_response)}')
+	logger.info('Start: detecting medical entities.')
+	comprehend_response = comprehend.detect_entities_v2(Text=text)
+	if comprehend_response['ResponseMetadata']['HTTPStatusCode'] == 200:
+		comprehend_response['message time'] = s3_obj['LastModified']
+		comprehend_response['message transcript text'] = text
+		comprehend_response['message transcript file url'] = file_url
+		logger.info('Success: detecting medical entities completed.')
+	else:
+		logger.error(f'Error: Comprehend service returned HTTP status code ' \
+                     f'{comprehend_response["ResponseMetadata"]["HTTPStatusCode"]}.')
+	return comprehend_response
 
-	# save results to database
-	db_table_name = os.environ.get('DB_TABLE_NAME', False)
-	if not db_table_name:
-		raise DBTableNameNotConfigured(
-			'Environment variable \'DB_TABLE_NAME\' is not defined.')
-	logger.info('saving data to database ...')
-	dynamodb = boto3.resource('dynamodb')
-	table = dynamodb.Table(db_table_name)
-	ddb_data = json.loads(json.dumps(comprehend_response), parse_float=Decimal)
-	ddb_data['time'] = f'{datetime.datetime.now()}'
-	table_response = table.put_item(Item = ddb_data)
-	logger.info(
-		f'the following response has been received form the '
-		f'database service:{json.dumps(table_response)}')
-	
-	# build message summary in html
-	msg_html_doc = build_message_summary(text,
-										 comprehend_response,
-										 s3_obj['LastModified'])
-	# save HTML document to S3 bucket
-	
-	
-	
-def build_message_summary(text, comprehend_response, msg_time):
+
+def save_to_db(comprehend_response):
 	"""
-	Put message information into HTML formatted document.
+	Save information received from Amazon Comprehend Medical to DynamoDB database.
+	"""
+	# save results to database
+	db_table_name = os.environ['DB_TABLE_NAME']
+	logger.info('Start: saving data to database.')
+	table = dynamodb.Table(db_table_name)
+	ddb_data = json.loads(
+		json.dumps(comprehend_response, default=str),
+		parse_float=Decimal)
+	table_response = table.put_item(Item=ddb_data)
+	if table_response['ResponseMetadata']['HTTPStatusCode'] == 200:
+		logger.info('Success: data written to database.')
+	else:
+		logger.error(f'Error: database service returned HTTP status code ' \
+                     f'{table_response["ResponseMetadata"]["HTTPStatusCode"]}.')
+
+
+def extract_msg_details(comprehend_response):
+	"""
+	Extract information from comprehend result and store in dictionary.
 	"""
 	phi_map = {
 		'phi_type': ['NAME', 'AGE', 'ADDRESS', 'PROFESSION', 'EMAIL',
@@ -92,7 +111,10 @@ def build_message_summary(text, comprehend_response, msg_time):
 	}
 	medical_categories = ['MEDICAL_CONDITION', 'ANATOMY', 'MEDICATION',
 						  'TEST_TREATMENT_PROCEDURE']
-	msg_data = {}
+	msg_data = {
+		'message time': comprehend_response["message time"],
+		'message transcript text': comprehend_response["message transcript text"],
+	}
 	for entity in comprehend_response['Entities']:
 		# set up sections
 		if entity['Category'] == 'PROTECTED_HEALTH_INFORMATION' and \
@@ -131,14 +153,21 @@ def build_message_summary(text, comprehend_response, msg_time):
 				msg_data['details']['Treatments, Tests, Procedures'].append(entity['Text'])
 			else:
 				msg_data['details']['Treatments, Tests, Procedures'] = [entity['Text']]
+	return msg_data
+
+
+def build_message_doc(msg_data):
+	"""
+	Put message information into HTML formatted document.
+	"""
 	# build HTML document
 	msg_html_doc = '<html><head><style>body {font-family: Arial, ' \
 		'serif;font-size: 14px;}</style><title></title></head><body>'
 	msg_html_doc += '<H1 style="color:#b30000" align="center">' \
 		'Voice Message Transcript</H1><hr>'
 	msg_html_doc += f'<p><b>Message Received : </b>' \
-					f'{msg_time.strftime("%B %d, %Y %H:%M:%S")}</p>'
-	msg_html_doc += f'<p><b>Transcript : </b>{text}</p>'
+					f'{(msg_data["message time"] + datetime.timedelta(hours=4)).strftime("%B %d, %Y %H:%M:%S")}</p>'
+	msg_html_doc += f'<p><b>Transcript : </b>{msg_data["message transcript text"]}</p>'
 	# add section with PHI
 	if msg_data.get('PHI', False):
 		msg_html_doc += '<hr>'
@@ -153,3 +182,21 @@ def build_message_summary(text, comprehend_response, msg_time):
 	msg_html_doc += '</body></html>'
 	return msg_html_doc
 
+
+def save_to_s3(msg_html_doc, file_url):
+	"""
+	Save the message HTML document to S3.
+	"""
+	logger.info('Start: saving the message HTML document to S3.')
+	bucket_name = os.environ['MSG_DOC_S3_BUCKET']
+	prefix = os.environ['MSG_DOC_S3_PREFIX']
+	file_name = file_url.split('/')[-1].split('.')[0] + '.html'
+	s3_response = s3.put_object(
+		Body=bytes(msg_html_doc, 'utf-8'),
+		Bucket=bucket_name,
+		Key=f'{prefix}{file_name}')
+	if s3_response['ResponseMetadata']['HTTPStatusCode'] == 200:
+		logger.info('Success: message HTML document written to S3.')
+	else:
+		logger.error(f'Error: database service returned HTTP status code ' \
+                     f'{s3_response["ResponseMetadata"]["HTTPStatusCode"]}.')
