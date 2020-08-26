@@ -69,7 +69,8 @@ def initiate_transciption_job(event, context):
 		# covert datetime objects to string
 		response['MedicalTranscriptionJob']['StartTime'] = f'{response["MedicalTranscriptionJob"]["StartTime"]}'
 		response['MedicalTranscriptionJob']['CreationTime'] = f'{response["MedicalTranscriptionJob"]["CreationTime"]}'
-		response['MedicalTranscriptionJob']['CompletionTime'] = f'{response["MedicalTranscriptionJob"]["CompletionTime"]}'
+		if response['MedicalTranscriptionJob'].get('CompletionTime', False):
+			response['MedicalTranscriptionJob']['CompletionTime'] = f'{response["MedicalTranscriptionJob"]["CompletionTime"]}'
 	else:
 		logger.error(f'Error: Transcribe service returned HTTP status code ' \
                      f'{response["ResponseMetadata"]["HTTPStatusCode"]}.')

@@ -111,6 +111,32 @@ export class CdkStack extends cdk.Stack {
     appointment_concierge_bucket.grantReadWrite(audio_to_text_handler);
     appointment_concierge_bucket.grantReadWrite(extract_entities_handler);
     appointment_concierge_bucket.grantReadWrite(send_email_handler);
+    
+    // const pythonista_user = iam.User.fromUserName(
+    //   this,
+    //   'pythonista_user',
+    //   'Pythonista_Appointment_Concierge')
+    const policy_statement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [appointment_concierge_bucket.bucketArn + '/incoming-audio/*'],
+      actions: ['s3:PutObject'],
+      // conditions: {'StringEquals':{
+      //   's3:prefix':['incoming-audio/'],
+      //   's3:delimiter':['/']}},
+    })
+
+    const policy = new iam.ManagedPolicy(this, 'pythonista_s3_access_policy', {
+      managedPolicyName: 'AppointmentConciergeS3ReadWrite',
+      description: 'Grants write access to Appointment Concierge S3 bucket.',
+      statements: [policy_statement],
+      users: [iam.User.fromUserName(this, 'pythonista_user', 'Pythonista_Appointment_Concierge')]
+    })
+
+    // const policy = new iam.ManagedPolicy(this, 'pythonista_s3_access_policy', {
+    //   managedPolicyName: 'AppointmentConciergeS3ReadWrite',
+    //   description: 'Grants write access to Appointment Concierge S3 bucket.',
+    //   users: pythonista_user,
+    // })
 
     const key = kms.Key.fromKeyArn(
       this,
