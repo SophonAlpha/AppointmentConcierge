@@ -45,7 +45,7 @@ def initiate_transciption_job(event, context):
 	bucket_name = file['s3']['bucket']['name']
 	key = file['s3']['object']['key']
 	file_name = key.split('/')[-1].split('.')[0]
-	job_name = context.aws_request_id + '-' + file_name
+	job_name = context.aws_request_id
 	file_url = f's3://{bucket_name}/{key}'
 	lang = 'en-US'
 	job_json = json.dumps({

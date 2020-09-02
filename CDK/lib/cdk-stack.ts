@@ -11,7 +11,7 @@ export class CdkStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // ----- S3 bucket for incoming voice messages ----- 
+    // ----- S3 bucket ----- 
     const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge', {
       bucketName: 'cdkstack-appointmentconcierge-uak8x5wugi8v',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -21,7 +21,7 @@ export class CdkStack extends cdk.Stack {
 
     // ----- DynamoDB table to store extracted data ----- 
     const table = new dynamodb.Table(this, 'Appointment Concierge', {
-      partitionKey: { name: 'message time', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'messageTime', type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
     cdk.Tag.add(table, 'Name', 'appointment-concierge')
@@ -51,7 +51,8 @@ export class CdkStack extends cdk.Stack {
       environment: {
         DB_TABLE_NAME: table.tableName,
         MSG_DOC_S3_BUCKET: appointment_concierge_bucket.bucketName,
-        MSG_DOC_S3_PREFIX: 'message-docs/'
+        MSG_DOC_S3_PREFIX: 'message-docs/',
+        COMPREHEND_RESULTS_S3_PREFIX: 'comprehend-results/'
       },
     });
     cdk.Tag.add(extract_entities_handler, 'Name', 'extract-medical-entities')
