@@ -55,7 +55,7 @@ def process_event(event, context):
 	                os.environ['MSG_DOC_S3_BUCKET'],
 	                os.environ['COMPREHEND_RESULTS_S3_PREFIX'],
 	                file_name)
-	save_to_db(comprehend_response)
+	# save_to_db(comprehend_response)
 	msg_data = extract_msg_details(comprehend_response)
 	msg_html_doc = build_message_doc(msg_data)
 	save_to_s3(msg_html_doc, comprehend_response['messageTranscriptFileUrl'])

@@ -20,12 +20,12 @@ export class CdkStack extends cdk.Stack {
     cdk.Tag.add(appointment_concierge_bucket, 'application', 'Appointment Concierge')
 
     // ----- DynamoDB table to store extracted data ----- 
-    const table = new dynamodb.Table(this, 'Appointment Concierge', {
-      partitionKey: { name: 'messageTime', type: dynamodb.AttributeType.STRING },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    })
-    cdk.Tag.add(table, 'Name', 'appointment-concierge')
-    cdk.Tag.add(table, 'application', 'Appointment Concierge')
+    // const table = new dynamodb.Table(this, 'Appointment Concierge', {
+    //   partitionKey: { name: 'messageTime', type: dynamodb.AttributeType.STRING },
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    // })
+    // cdk.Tag.add(table, 'Name', 'appointment-concierge')
+    // cdk.Tag.add(table, 'application', 'Appointment Concierge')
 
     // ----- lambda function to convert audio to text ----- 
     const audio_to_text_handler = new lambda.Function(this, 'audio-to-text', {
@@ -49,7 +49,7 @@ export class CdkStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
       logRetention: RetentionDays.THREE_MONTHS,
       environment: {
-        DB_TABLE_NAME: table.tableName,
+        // DB_TABLE_NAME: table.tableName,
         MSG_DOC_S3_BUCKET: appointment_concierge_bucket.bucketName,
         MSG_DOC_S3_PREFIX: 'message-docs/',
         COMPREHEND_RESULTS_S3_PREFIX: 'comprehend-results/'
@@ -72,6 +72,24 @@ export class CdkStack extends cdk.Stack {
     });
     cdk.Tag.add(send_email_handler, 'Name', 'send-email')
     cdk.Tag.add(send_email_handler, 'application', 'Appointment Concierge')
+
+    // ----- lambda function to load test data ----- 
+    const load_test_data_handler = new lambda.Function(this, 'load-test-data', {
+      runtime: lambda.Runtime.PYTHON_3_8,
+      code: lambda.Code.fromAsset('../AppointmentConcierge/LoadTestData'),
+      handler: 'load_test_data.lambda_handler',
+      timeout: cdk.Duration.seconds(600),
+      logRetention: RetentionDays.THREE_MONTHS,
+      environment: {
+        START_DATE: '2020-03-01',
+        END_DATE: '2020-09-03',
+        NUM_MESSAGES: '100',
+        TEST_DATA_TARGET_S3_BUCKET: appointment_concierge_bucket.bucketName,
+        TEST_DATA_TARGET_S3_PREFIX: 'comprehend-results/',
+      },
+    });
+    cdk.Tag.add(load_test_data_handler, 'Name', 'load-test-data')
+    cdk.Tag.add(load_test_data_handler, 'application', 'Appointment Concierge')
 
     // ----- trigger for lambda functions -----
     audio_to_text_handler.addEventSource(new S3EventSource(appointment_concierge_bucket, {
@@ -112,18 +130,12 @@ export class CdkStack extends cdk.Stack {
     appointment_concierge_bucket.grantReadWrite(audio_to_text_handler);
     appointment_concierge_bucket.grantReadWrite(extract_entities_handler);
     appointment_concierge_bucket.grantReadWrite(send_email_handler);
+    appointment_concierge_bucket.grantReadWrite(load_test_data_handler);
     
-    // const pythonista_user = iam.User.fromUserName(
-    //   this,
-    //   'pythonista_user',
-    //   'Pythonista_Appointment_Concierge')
     const policy_statement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [appointment_concierge_bucket.bucketArn + '/incoming-audio/*'],
       actions: ['s3:PutObject'],
-      // conditions: {'StringEquals':{
-      //   's3:prefix':['incoming-audio/'],
-      //   's3:delimiter':['/']}},
     })
 
     const policy = new iam.ManagedPolicy(this, 'pythonista_s3_access_policy', {
@@ -132,12 +144,6 @@ export class CdkStack extends cdk.Stack {
       statements: [policy_statement],
       users: [iam.User.fromUserName(this, 'pythonista_user', 'Pythonista_Appointment_Concierge')]
     })
-
-    // const policy = new iam.ManagedPolicy(this, 'pythonista_s3_access_policy', {
-    //   managedPolicyName: 'AppointmentConciergeS3ReadWrite',
-    //   description: 'Grants write access to Appointment Concierge S3 bucket.',
-    //   users: pythonista_user,
-    // })
 
     const key = kms.Key.fromKeyArn(
       this,
