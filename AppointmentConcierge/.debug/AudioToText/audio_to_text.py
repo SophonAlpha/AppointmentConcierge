@@ -45,7 +45,7 @@ def initiate_transciption_job(event, context):
 	bucket_name = file['s3']['bucket']['name']
 	key = file['s3']['object']['key']
 	file_name = key.split('/')[-1].split('.')[0]
-	job_name = context.aws_request_id + '-' + file_name
+	job_name = context.aws_request_id
 	file_url = f's3://{bucket_name}/{key}'
 	lang = 'en-US'
 	job_json = json.dumps({
@@ -56,9 +56,7 @@ def initiate_transciption_job(event, context):
 		'Specialty': 'PRIMARYCARE',
     	'Type': 'CONVERSATION',
 	})
-	logger.info(
-		f'starting transcription job with the following parameters:{job_json}'
-		)
+	logger.info('Start: starting transcription job.')
 	response = transcribe.start_medical_transcription_job(
 		MedicalTranscriptionJobName = job_name,
 		Media = {'MediaFileUri': file_url},
@@ -66,13 +64,13 @@ def initiate_transciption_job(event, context):
 		OutputBucketName = output_bucket_name,
 		Specialty = 'PRIMARYCARE',
     	Type = 'CONVERSATION',)
-	# covert datetime objects to string
-	if response["MedicalTranscriptionJob"].get("StartTime", False):
+	if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+		logger.info('Success: transcription job started.')
+		# covert datetime objects to string
 		response['MedicalTranscriptionJob']['StartTime'] = f'{response["MedicalTranscriptionJob"]["StartTime"]}'
-	if response["MedicalTranscriptionJob"].get("CreationTime", False):
 		response['MedicalTranscriptionJob']['CreationTime'] = f'{response["MedicalTranscriptionJob"]["CreationTime"]}'
-	if response["MedicalTranscriptionJob"].get("CompletionTime", False):
-		response['MedicalTranscriptionJob']['CompletionTime'] = f'{response["MedicalTranscriptionJob"]["CompletionTime"]}'
-	logger.info(
-		f'the following response has been received form the '
-		f'Transcribe service:{json.dumps(response)}')
+		if response['MedicalTranscriptionJob'].get('CompletionTime', False):
+			response['MedicalTranscriptionJob']['CompletionTime'] = f'{response["MedicalTranscriptionJob"]["CompletionTime"]}'
+	else:
+		logger.error(f'Error: Transcribe service returned HTTP status code ' \
+                     f'{response["ResponseMetadata"]["HTTPStatusCode"]}.')

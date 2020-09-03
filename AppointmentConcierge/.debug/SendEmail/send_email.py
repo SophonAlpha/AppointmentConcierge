@@ -11,7 +11,9 @@ from email.mime.multipart import MIMEMultipart
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Initialize boto3 client at global scope for connection reuse
 ssm = boto3.client('ssm')
+s3 = boto3.client('s3')
 
 
 def lambda_handler(event, context):
@@ -40,15 +42,18 @@ def lambda_handler(event, context):
 
 def process_event(event, context):
     config = load_config(os.environ['SSM_PS_APPCONFIG_PATH'])
-    logger.info(f'app_config = {json.dumps(config)}')
-
+    msg_doc = load_msg_doc(event)
+    send_email(config, msg_doc)
+    
 
 def load_config(app_config_path):
     """
     Load configuration stored in SSM Parameter Store
+    
     :param app_config_path: Path to configuration in SSM Parameter Store
     :return: dictionary holding configuration
     """
+    logger.info('Start: retrieving configuration from Systems Manager Parameter Store.')
     config = {}
     param_details = ssm.get_parameters_by_path(
         Path=app_config_path,
@@ -59,4 +64,50 @@ def load_config(app_config_path):
         section_name = param_path_array[-1]
         config_values = json.loads(param['Value'])
         config = {section_name: config_values}
+    logger.info('Success: configuration from Systems Manager Parameter Store retrieved.')
     return config
+
+
+def load_msg_doc(event):
+    """
+    Reading the message HTML document from S3.ArithmeticError
+    
+    :param event: Lambda trigger event message 
+    :return: message HTML document
+    """
+    logger.info('Start: reading message document from S3.')
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+    file_url = f's3://{bucket_name}/{key}'
+    s3_obj = s3.get_object(Bucket=bucket_name, Key=key)
+    if s3_obj['ResponseMetadata']['HTTPStatusCode'] == 200:
+        msg_doc = s3_obj['Body'].read().decode('utf-8')
+        logger.info('Success: read message document from S3.')
+    else:
+        logger.error(f'Error: reading message document from S3 failed with ' \
+                     f'HTTP status code {s3_obj["ResponseMetadata"]["HTTPStatusCode"]}.')
+    return msg_doc
+
+
+def send_email(config, msg_doc):
+    message = MIMEMultipart()
+    receiver_email = os.environ['RECEIVER_EMAIL_ADDRESS']
+    message["Subject"] = "[Appointment Concierge] - voice message transcript"
+    message["From"] = config['SendEmail']['smtp-sender-email']
+    message["To"] = receiver_email
+    message.attach(MIMEText(msg_doc, "html"))
+    logger.info('Start: sending email.')
+    with smtplib.SMTP(
+        config['SendEmail']['smtp-server'], config['SendEmail']['smtp-port']
+        ) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(config['SendEmail']['smtp-user-id'],
+                     config['SendEmail']['smtp-password'])
+        server.sendmail(
+            config['SendEmail']['smtp-sender-email'],
+            receiver_email,
+            message.as_string()
+        )
+        logger.info('Success: email sent.')

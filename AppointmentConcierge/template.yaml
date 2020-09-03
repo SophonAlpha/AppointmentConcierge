@@ -31,4 +31,13 @@ Resources:
       CodeUri: .debug/
       Environment:
         Variables:
-          SSM_PS_APPCONFIG_PATH: '/AppointmentConcierge'
+          SSM_PS_APPCONFIG_PATH: /AppointmentConcierge
+  LoadTestData:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: LoadTestData/load_test_data.lambda_handler
+      Runtime: python3.6
+      Description: ''
+      MemorySize: 128
+      Timeout: 15
+      CodeUri: .debug/

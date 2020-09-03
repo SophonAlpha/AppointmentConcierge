@@ -15,7 +15,6 @@ from botocore.exceptions import ClientError
 
 def main():
     console.clear()
-    print()
 
     if not appex.is_running_extension():
         print('This script is intended to be run from the sharing extension.')
@@ -41,12 +40,13 @@ def main():
     my_session = boto3.session.Session(
         aws_access_key_id=access_key_id,
         aws_secret_access_key=secret_access_key,
-        region_name='me-south-1'
+        region_name='eu-west-1'
         )
     s3_client = my_session.client('s3')
     file_path = appex.get_file_path()
     file_name = file_path.split('/')[-1]
 
+    print('sending voice message ...')
     try:
         response = s3_client.upload_file(
             file_path,
@@ -55,6 +55,7 @@ def main():
     except ClientError as e:
         print(e)
         return False
+    console.clear()
     console.alert(
         'Appointment Concierge',
         'Thank you. Your message has been received. A member of our customer ' \

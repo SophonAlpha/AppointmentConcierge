@@ -13,7 +13,7 @@ export class CdkStack extends cdk.Stack {
 
     // ----- S3 bucket ----- 
     const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge', {
-      bucketName: 'cdkstack-appointmentconcierge-uak8x5wugi8v',
+      bucketName: 'cdk-appointmentconcierge035121dc-1jhcoc97i63qb',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
@@ -105,7 +105,7 @@ export class CdkStack extends cdk.Stack {
       
     send_email_handler.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
-      resources: ['arn:aws:ssm:me-south-1:060337561279:parameter/AppointmentConcierge'],
+      resources: ['arn:aws:ssm:eu-west-1:060337561279:parameter/AppointmentConcierge'],
       actions: ['ssm:GetParametersByPath'],
     }))
     
