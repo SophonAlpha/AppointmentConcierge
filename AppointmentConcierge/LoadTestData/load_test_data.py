@@ -62,6 +62,18 @@ def process_event(event, context):
                        4: 2, # Friday
                        5: 1, # Saturday
                        6: 5} # Sunday
+    hour_weights =  [
+        1, 1, 1, 1, 1, 3,
+        6, 8, 10, 9, 7, 6,
+        4, 3, 2, 4, 3, 3,
+        3, 2, 1, 1, 1, 1,
+    ]
+    # hour_weights =  {
+    #     0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0,
+    #     6: 6, 7: 8, 8: 10, 9: 0, 10: 0, 11: 0,
+    #     12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0,
+    #     18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0,
+    # }
     # paramters for random.choices()
     start_weekday = start_date.weekday()
     num_days = (end_date - start_date).days
@@ -77,8 +89,11 @@ def process_event(event, context):
     # write test messages to S3 bucket
     nth_msg = 100
     for idx, _ in enumerate(range(num_messages)):
-        message_time = random.choices(dates, weights=weights)[0] + \
-                       datetime.timedelta(seconds=random.randrange(24 * 60 * 60))
+        message_day = random.choices(dates, weights=weights)[0]
+        message_hour = datetime.timedelta(
+            hours=random.choices(range(24), weights=hour_weights)[0])
+        message_seconds = datetime.timedelta(seconds=random.randrange(60 * 60))
+        message_time = message_day + message_hour + message_seconds
         new_message = test_messages[random.randrange(len(test_messages))]
         new_message['messageTime'] = message_time.strftime('%Y-%m-%d %H:%M:%S')
         new_message['messageId'] = str(uuid.uuid4())
