@@ -13,7 +13,7 @@ export class CdkStack extends cdk.Stack {
 
     // ----- S3 bucket ----- 
     const appointment_concierge_bucket = new s3.Bucket(this, 'appointment-concierge', {
-      bucketName: 'cdk-appointmentconcierge035121dc-1jhcoc97i63qb',
+      bucketName: 'cdk-appointmentconcierge035121dc-1mmu9cw6xkv85',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
