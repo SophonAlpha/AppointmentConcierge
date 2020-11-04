@@ -17,8 +17,8 @@ def lambda_handler(event, context):
 	Entry point for the lambda function. Will be triggered by an audio file
 	uploaded to the S3 bucket.
 	
-	This function primary pupose is to setup logging and ansure we get any
-	exception information into CloudWatch.
+	This function primary purpose is to setup logging and ensure we get information 
+	from exceptions into CloudWatch.
 	"""
 	try:
 		logger.info(f'Received the following event data: \

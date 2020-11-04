@@ -20,8 +20,8 @@ def lambda_handler(event, context):
 	Entry point for the lambda function. Will be triggered as a custom resource by CDK.
 	Loads test data to populate for the QuickSight dashboard.
 	
-	This function primary pupose is to setup logging and ansure we get any
-	exception information into CloudWatch.
+	This function primary purpose is to setup logging and ensure we get information 
+	from exceptions into CloudWatch.
 	"""
     try:
         logger.info(f'Received the following event data: \
@@ -68,12 +68,6 @@ def process_event(event, context):
         4, 3, 2, 4, 3, 3,
         3, 2, 1, 1, 1, 1,
     ]
-    # hour_weights =  {
-    #     0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0,
-    #     6: 6, 7: 8, 8: 10, 9: 0, 10: 0, 11: 0,
-    #     12: 0, 13: 0, 14: 0, 15: 0, 16: 0, 17: 0,
-    #     18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0,
-    # }
     # paramters for random.choices()
     start_weekday = start_date.weekday()
     num_days = (end_date - start_date).days

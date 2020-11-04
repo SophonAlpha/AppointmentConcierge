@@ -19,14 +19,6 @@ export class CdkStack extends cdk.Stack {
     cdk.Tag.add(appointment_concierge_bucket, 'Name', 'appointment-concierge')
     cdk.Tag.add(appointment_concierge_bucket, 'application', 'Appointment Concierge')
 
-    // ----- DynamoDB table to store extracted data ----- 
-    // const table = new dynamodb.Table(this, 'Appointment Concierge', {
-    //   partitionKey: { name: 'messageTime', type: dynamodb.AttributeType.STRING },
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
-    // })
-    // cdk.Tag.add(table, 'Name', 'appointment-concierge')
-    // cdk.Tag.add(table, 'application', 'Appointment Concierge')
-
     // ----- lambda function to convert audio to text ----- 
     const audio_to_text_handler = new lambda.Function(this, 'audio-to-text', {
       runtime: lambda.Runtime.PYTHON_3_8,
