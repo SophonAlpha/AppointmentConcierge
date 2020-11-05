@@ -26,9 +26,7 @@ to identify medical entities and their relationships (e.g. symptoms, medication 
 ) & (10) Lambda function `send email` is then triggered. This Lambda function uses the comprehend
 results to compose and send an email. The image below shows a sample email.
 
-![email](img/email.png)
-
-<img src="img/email.png" alt="email" width="400"/>
+<img src="img/email.png" alt="email" width="800"/>
 
 The text shown after "Transcript :" is the result from Amazon Transcribe Medical. Any "Names
  :", "Symptoms :" and "Medication :" are identified via Amazon Comprehend Medical. The idea
