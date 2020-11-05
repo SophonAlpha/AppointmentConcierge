@@ -28,6 +28,8 @@ results to compose and send an email. The image below shows a sample email.
 
 ![email](img/email.png)
 
+<img src="img/email.png" alt="email" width="400"/>
+
 The text shown after "Transcript :" is the result from Amazon Transcribe Medical. Any "Names
  :", "Symptoms :" and "Medication :" are identified via Amazon Comprehend Medical. The idea
 behind the demo is that this information can then be used by an appointment coordinator to
